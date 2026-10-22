@@ -8,6 +8,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # 不写 USER：Harbor 的保活进程随默认用户运行，评分前清理 runner 进程时不能把它一起结束。
 RUN useradd --create-home --uid 1000 runner
 
+# Agent runtime tooling is preinstalled so model runs do not repeat the slow network setup.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl nodejs npm procps \
+    && npm install -g @anthropic-ai/claude-code \
+    && npm cache clean --force \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY app/ /app/
 RUN chown -R runner:runner /app
