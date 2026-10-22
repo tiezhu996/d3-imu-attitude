@@ -383,7 +383,7 @@ def test_nominal_near_singular_matrix_with_temperature():
     """「标称矩阵只用于激励不足时回退」"""
     payload, expected, stamp = nominal_near_singular_case()
     got = checkpoint_q(run_case(payload), stamp)
-    assert rotation_error(got, expected) < 1.5e-3, rotation_error(got, expected)
+    assert rotation_error(got, expected) < 8.0e-4, rotation_error(got, expected)
 
 
 # ---------- difficulty_3: outlier rejection ----------

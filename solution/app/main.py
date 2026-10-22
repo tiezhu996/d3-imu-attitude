@@ -79,34 +79,44 @@ def invert_matrix(matrix):
 def least_squares(features, target):
     rows = len(features)
     columns = len(features[0])
-    work = [
-        [float(features[row][column]) for column in range(columns)] + [float(target[row])]
-        for row in range(rows)
-    ]
-    for active in range(columns):
-        tail = [work[row][active] for row in range(active, rows)]
-        norm = math.sqrt(sum(value * value for value in tail))
-        if norm < RIDGE:
-            raise ValueError("rank deficient design")
-        alpha = -norm if not tail[0] < 0.0 else norm
-        vector = tail[:]
-        vector[0] -= alpha
-        vector_norm = math.sqrt(sum(value * value for value in vector))
-        if vector_norm < RIDGE:
-            continue
-        vector = [value / vector_norm for value in vector]
-        for column in range(active, columns + 1):
-            dot = sum(vector[index] * work[active + index][column] for index in range(rows - active))
-            for index in range(rows - active):
-                work[active + index][column] -= 2.0 * vector[index] * dot
-    result = [0.0] * columns
-    for row in range(columns - 1, -1, -1):
-        pivot = work[row][row]
-        if abs(pivot) < RIDGE:
-            raise ValueError("rank deficient triangular system")
-        rhs = work[row][columns] - sum(work[row][column] * result[column] for column in range(row + 1, columns))
-        result[row] = rhs / pivot
-    return result
+    with localcontext() as context:
+        context.prec = 60
+        work = [
+            [Decimal(str(features[row][column])) for column in range(columns)]
+            + [Decimal(str(target[row]))]
+            for row in range(rows)
+        ]
+        tiny = Decimal("1e-50")
+        for active in range(columns):
+            tail = [work[row][active] for row in range(active, rows)]
+            norm = sum(value * value for value in tail).sqrt()
+            if norm < tiny:
+                raise ValueError("rank deficient design")
+            alpha = -norm if not tail[0] < 0 else norm
+            vector = tail[:]
+            vector[0] -= alpha
+            vector_norm = sum(value * value for value in vector).sqrt()
+            if vector_norm < tiny:
+                continue
+            vector = [value / vector_norm for value in vector]
+            for column in range(active, columns + 1):
+                dot = sum(
+                    vector[index] * work[active + index][column]
+                    for index in range(rows - active)
+                )
+                for index in range(rows - active):
+                    work[active + index][column] -= Decimal(2) * vector[index] * dot
+        result = [Decimal(0)] * columns
+        for row in range(columns - 1, -1, -1):
+            pivot = work[row][row]
+            if abs(pivot) < tiny:
+                raise ValueError("rank deficient triangular system")
+            rhs = work[row][columns] - sum(
+                work[row][column] * result[column]
+                for column in range(row + 1, columns)
+            )
+            result[row] = rhs / pivot
+        return [float(value) for value in result]
 
 
 def fit_matrix_bias(rows):
