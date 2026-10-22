@@ -207,7 +207,7 @@ def matrix_case(case_id):
         rate = [0.3, 0.9, -0.4]
         duration = 0.8
     else:
-        scale = 5.0e-5
+        scale = 8.0e-6
         matrix = [
             [1.04 * scale, 0.018 * scale, -0.012 * scale],
             [-0.016 * scale, 0.96 * scale, 0.021 * scale],
