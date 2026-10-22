@@ -182,12 +182,12 @@ def detect_outliers(rows, matrix, bias, coefficient):
     return rejected
 
 
-def estimate_calibration(rows):
+def estimate_calibration(rows, nominal_matrix):
     rejected = []
     matrix_mode = "fitted"
     temperature_mode = "fit"
     outlier_mode = "detect"
-    matrix = identity_matrix()
+    matrix = [[float(value) for value in row] for row in nominal_matrix]
     bias = [0.0, 0.0, 0.0]
     coefficient = [0.0, 0.0, 0.0]
     for _ in range(6):
@@ -200,10 +200,10 @@ def estimate_calibration(rows):
             bias = mean_residual_bias(clean, matrix)
             coefficient = [0.0, 0.0, 0.0]
         elif temperature_mode == "fit":
-            matrix = identity_matrix()
+            matrix = [[float(value) for value in row] for row in nominal_matrix]
             bias, coefficient = fit_bias_temperature(clean, matrix)
         else:
-            matrix = identity_matrix()
+            matrix = [[float(value) for value in row] for row in nominal_matrix]
             bias = mean_residual_bias(clean, matrix)
             coefficient = [0.0, 0.0, 0.0]
         if outlier_mode == "detect":
@@ -222,10 +222,10 @@ def estimate_calibration(rows):
         bias = mean_residual_bias(clean, matrix)
         coefficient = [0.0, 0.0, 0.0]
     elif temperature_mode == "fit":
-        matrix = identity_matrix()
+        matrix = [[float(value) for value in row] for row in nominal_matrix]
         bias, coefficient = fit_bias_temperature(clean, matrix)
     else:
-        matrix = identity_matrix()
+        matrix = [[float(value) for value in row] for row in nominal_matrix]
         bias = mean_residual_bias(clean, matrix)
         coefficient = [0.0, 0.0, 0.0]
     return matrix, bias, coefficient, rejected
@@ -242,7 +242,7 @@ def corrected_rate(raw, temperature, bias, coefficient, inverse):
 
 def run(data):
     matrix, bias, coefficient, rejected = estimate_calibration(
-        data["calibration"]["samples"]
+        data["calibration"]["samples"], data["calibration"]["nominal_matrix"]
     )
     inverse = invert_matrix(matrix)
     samples = data["samples"]

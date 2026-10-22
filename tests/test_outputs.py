@@ -157,12 +157,14 @@ def replay_samples(matrix, bias, coefficient, rate, motion_start, motion_end, te
 
 
 def make_payload(matrix, bias, coefficient, temperatures, count, replay_rate,
-                 q0, duration, temperature_replay, noise=0.0, spikes=None, rate_mode="normal"):
+                 q0, duration, temperature_replay, noise=0.0, spikes=None, rate_mode="normal",
+                 nominal_matrix=None):
     motion_start = 0.2
     motion_end = motion_start + duration
     payload = {
         "run_id": "calibrated-replay",
         "calibration": {
+            "nominal_matrix": nominal_matrix or [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
             "samples": calibration_rows(
                 matrix, bias, coefficient, temperatures, count, noise=noise, spikes=spikes,
                 rate_mode=rate_mode
@@ -270,6 +272,13 @@ def outlier_case():
     return payload, bias, sorted(spikes), expected, stamp
 
 
+def nominal_near_singular_case():
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures" / "near_singular_temperature.json").read_text(encoding="utf-8")
+    )
+    return fixture["input"], fixture["expected_q"], fixture["checkpoint"]
+
+
 # ---------- gate: entry contract ----------
 
 def test_prints_contract_fields():
@@ -350,6 +359,13 @@ def test_temperature_correction_drives_attitude():
     payload, _bias, _coefficient, expected, stamp = temperature_case()
     got = checkpoint_q(run_case(payload), stamp)
     assert rotation_error(got, expected) < 2.0e-4, rotation_error(got, expected)
+
+
+def test_nominal_near_singular_matrix_with_temperature():
+    """「标称矩阵只用于激励不足时回退」"""
+    payload, expected, stamp = nominal_near_singular_case()
+    got = checkpoint_q(run_case(payload), stamp)
+    assert rotation_error(got, expected) < 1.0e-3, rotation_error(got, expected)
 
 
 # ---------- difficulty_3: outlier rejection ----------

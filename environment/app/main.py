@@ -69,8 +69,8 @@ def invert_matrix(matrix):
     ]
 
 
-def estimate_calibration(rows):
-    matrix = identity_matrix()
+def estimate_calibration(rows, nominal_matrix):
+    matrix = [[float(value) for value in row] for row in nominal_matrix]
     residuals = []
     for row in rows:
         predicted = matvec(matrix, row["true_rate"])
@@ -90,7 +90,7 @@ def corrected_rate(raw, temperature, matrix, bias, temp_coefficient, inverse):
 
 def run(data):
     matrix, bias, temp_coefficient, rejected = estimate_calibration(
-        data["calibration"]["samples"]
+        data["calibration"]["samples"], data["calibration"]["nominal_matrix"]
     )
     inverse = invert_matrix(matrix)
 
