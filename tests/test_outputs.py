@@ -298,6 +298,24 @@ def test_wrong_argument_count_exits_2():
     assert proc.stdout.strip() == ""
 
 
+def test_released_rejected_released_has_no_state_leak():
+    """「同一份输入重复运行，结果必须一致」"""
+    payload, _bias, rejected, _expected, _stamp = outlier_case()
+    clean = json.loads(json.dumps(payload))
+    clean["calibration"]["samples"] = [
+        row for index, row in enumerate(clean["calibration"]["samples"])
+        if index not in rejected
+    ]
+    states = ["released", "rejected", "released"]
+    first = run_case(clean)
+    assert states[0] == "released"
+    run_case(payload)
+    assert states[1] == "rejected"
+    third = run_case(clean)
+    assert states[2] == "released"
+    assert first == third
+
+
 # ---------- difficulty_1: full cross-axis calibration matrix ----------
 
 def test_matrix_recovers_cross_axis_gain():

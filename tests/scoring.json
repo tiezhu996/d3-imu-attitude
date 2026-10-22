@@ -2,7 +2,8 @@
   "schema_version": 1,
   "gate_tests": [
     "test_outputs.py::test_prints_contract_fields",
-    "test_outputs.py::test_wrong_argument_count_exits_2"
+    "test_outputs.py::test_wrong_argument_count_exits_2",
+    "test_outputs.py::test_released_rejected_released_has_no_state_leak"
   ],
   "tests": {
     "test_outputs.py::test_matrix_recovers_cross_axis_gain": {
