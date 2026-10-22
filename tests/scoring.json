@@ -5,14 +5,45 @@
     "test_outputs.py::test_wrong_argument_count_exits_2"
   ],
   "tests": {
-    "test_outputs.py::test_matrix_recovers_cross_axis_gain": {"weight": 0.14, "rationale": "难点1：从标定数据恢复完整 3×3 增益矩阵，核心标定量，难点合计0.40"},
-    "test_outputs.py::test_matrix_inverse_drives_attitude": {"weight": 0.13, "rationale": "难点1：矩阵求逆后用于多轴回放"},
-    "test_outputs.py::test_matrix_handles_rotated_initial_frame": {"weight": 0.13, "rationale": "难点1：非单位初始姿态下确认增益修正方向"},
-    "test_outputs.py::test_bias_at_reference_temperature": {"weight": 0.10, "rationale": "难点2：参考温度零偏，难点合计0.30"},
-    "test_outputs.py::test_temperature_coefficient_is_recovered": {"weight": 0.10, "rationale": "难点2：从多温度标定数据拟合温漂斜率"},
-    "test_outputs.py::test_temperature_correction_drives_attitude": {"weight": 0.10, "rationale": "难点2：回放段按各自温度扣除零偏"},
-    "test_outputs.py::test_rejected_indices_are_exact": {"weight": 0.10, "rationale": "难点3：异常标定样本必须定位准确，难点合计0.30"},
-    "test_outputs.py::test_outlier_rejection_recovers_bias": {"weight": 0.10, "rationale": "难点3：剔除尖峰后恢复零偏"},
-    "test_outputs.py::test_outlier_rejection_drives_attitude": {"weight": 0.10, "rationale": "难点3：异常样本不得污染最终姿态"}
+    "test_outputs.py::test_matrix_recovers_cross_axis_gain": {
+      "weight": 0.1,
+      "rationale": "难点1：从标定数据恢复完整 3×3 增益矩阵，核心标定量，难点合计0.40"
+    },
+    "test_outputs.py::test_matrix_inverse_drives_attitude": {
+      "weight": 0.1,
+      "rationale": "难点1：矩阵求逆后用于多轴回放"
+    },
+    "test_outputs.py::test_matrix_handles_rotated_initial_frame": {
+      "weight": 0.1,
+      "rationale": "难点1：非单位初始姿态下确认增益修正方向"
+    },
+    "test_outputs.py::test_bias_at_reference_temperature": {
+      "weight": 0.1,
+      "rationale": "难点2：参考温度零偏，难点合计0.30"
+    },
+    "test_outputs.py::test_temperature_coefficient_is_recovered": {
+      "weight": 0.1,
+      "rationale": "难点2：从多温度标定数据拟合温漂斜率"
+    },
+    "test_outputs.py::test_temperature_correction_drives_attitude": {
+      "weight": 0.1,
+      "rationale": "难点2：回放段按各自温度扣除零偏"
+    },
+    "test_outputs.py::test_rejected_indices_are_exact": {
+      "weight": 0.1,
+      "rationale": "难点3：异常标定样本必须定位准确，难点合计0.30"
+    },
+    "test_outputs.py::test_outlier_rejection_recovers_bias": {
+      "weight": 0.1,
+      "rationale": "难点3：剔除尖峰后恢复零偏"
+    },
+    "test_outputs.py::test_outlier_rejection_drives_attitude": {
+      "weight": 0.1,
+      "rationale": "难点3：异常样本不得污染最终姿态"
+    },
+    "test_outputs.py::test_small_signal_matrix_keeps_scale": {
+      "weight": 0.1,
+      "rationale": "难点1：小信号增益矩阵的行列式很小但条件数正常，不能按绝对阈值误判奇异"
+    }
   }
 }

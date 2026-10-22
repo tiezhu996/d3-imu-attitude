@@ -11,9 +11,9 @@
 修好 `/app/main.py`。用法是 `python3 /app/main.py <输入文件>`，输入文件是一个 JSON 对象：
 
 - `run_id`：字符串。
-- `calibration.samples`：标定数组。每项含 `raw_gyro`、`true_rate`、`temperature_c`。
+- `calibration.samples`：标定数组。每项含 `raw_gyro`、`true_rate`、`temperature_c`。`raw_gyro` 是传感器原始输出，单位为 V。
 - `initial_quaternion`：`[w, x, y, z]`，姿态表示从机体系到世界系的旋转。
-- `samples`：按时间递增的回放数组。每项含 `t`（秒）、`raw_gyro`、`temperature_c`。每个采样值保持到下一个采样时刻；最后一个采样点不参与积分。
+- `samples`：按时间递增的回放数组。每项含 `t`（秒）、`raw_gyro`、`temperature_c`。`raw_gyro` 是传感器原始输出。每个采样值保持到下一个采样时刻；最后一个采样点不参与积分。
 - `checkpoints`：需要输出的时刻，均与某个采样时刻相同。
 
 标定模型为：

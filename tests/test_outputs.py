@@ -197,7 +197,7 @@ def matrix_case(case_id):
         q0 = [0.5, 0.5, 0.5, 0.5]
         rate = [0.8, -0.5, 1.2]
         duration = 0.65
-    else:
+    elif case_id == 3:
         matrix = [
             [1.08, 0.012, 0.025],
             [-0.021, 0.93, 0.019],
@@ -206,7 +206,19 @@ def matrix_case(case_id):
         q0 = [0.9238795325112867, 0.3826834323650898, 0.0, 0.0]
         rate = [0.3, 0.9, -0.4]
         duration = 0.8
+    else:
+        scale = 5.0e-5
+        matrix = [
+            [1.04 * scale, 0.018 * scale, -0.012 * scale],
+            [-0.016 * scale, 0.96 * scale, 0.021 * scale],
+            [0.013 * scale, -0.019 * scale, 1.03 * scale],
+        ]
+        q0 = [0.9238795325112867, 0.0, 0.3826834323650898, 0.0]
+        rate = [0.5, -0.3, 0.7]
+        duration = 0.7
     bias = [0.012, -0.008, 0.006]
+    if case_id == 4:
+        bias = [5.0e-7, -3.0e-7, 4.0e-7]
     payload, expected, stamp = make_payload(
         matrix, bias, [0.0, 0.0, 0.0], [25.0], 90, rate, q0, duration, 25.0,
         noise=0.0, rate_mode="conditioned" if case_id == 2 else "normal"
@@ -283,6 +295,16 @@ def test_matrix_handles_rotated_initial_frame():
     payload, _matrix, expected, stamp = matrix_case(3)
     got = checkpoint_q(run_case(payload), stamp)
     assert rotation_error(got, expected) < 2.0e-4, rotation_error(got, expected)
+
+
+def test_small_signal_matrix_keeps_scale():
+    """「`raw_gyro` 是传感器原始输出」"""
+    payload, want, expected, stamp = matrix_case(4)
+    result = run_case(payload)
+    got = result["calibration"]["matrix"]
+    scale = max(abs(value) for row in want for value in row)
+    assert max(abs(got[row][column] - want[row][column]) for row in range(3) for column in range(3)) < 5.0e-5 * scale
+    assert rotation_error(checkpoint_q(result, stamp), expected) < 2.0e-4
 
 
 # ---------- difficulty_2: temperature-dependent bias ----------

@@ -63,7 +63,8 @@ def invert_matrix(matrix):
     d, e, f = matrix[1]
     g, h, i = matrix[2]
     determinant = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
-    if abs(determinant) < 1.0e-12:
+    scale = max(abs(value) for row in matrix for value in row)
+    if abs(determinant) < 1.0e-12 * scale * scale * scale:
         raise ValueError("singular calibration matrix")
     return [
         [(e * i - f * h) / determinant, (c * h - b * i) / determinant, (b * f - c * e) / determinant],
