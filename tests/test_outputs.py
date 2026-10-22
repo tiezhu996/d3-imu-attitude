@@ -1,8 +1,4 @@
-"""Acceptance tests for short inertial attitude replay.
-
-Expected trajectories come from closed-form quaternion kinematics in this file.
-They do not import or execute the submitted solution while computing expectations.
-"""
+"""Acceptance tests for calibrated short inertial attitude replay."""
 
 import json
 import math
@@ -22,11 +18,9 @@ CANDIDATE_ENV = {
     "TZ": "UTC",
 }
 CALL_TIMEOUT_SEC = 30
-ROTATION_TOL = 2.0e-5
 
 
 def run_candidate(*args, timeout=CALL_TIMEOUT_SEC):
-    """Run the candidate as runner and terminate its process group on timeout."""
     as_root = os.getuid() == 0
     proc = subprocess.Popen(
         [PYTHON, ENTRY, *[str(a) for a in args]],
@@ -50,7 +44,7 @@ def run_candidate(*args, timeout=CALL_TIMEOUT_SEC):
 
 
 def run_case(payload):
-    folder = Path(tempfile.mkdtemp(prefix="imu-"))
+    folder = Path(tempfile.mkdtemp(prefix="imu-cal-"))
     folder.chmod(0o755)
     case = folder / "input.json"
     case.write_text(json.dumps(payload), encoding="utf-8")
@@ -99,130 +93,154 @@ def checkpoint_q(result, stamp):
     return rows[0]["q_wxyz"]
 
 
-def uniform_samples(end, step, gyro_at):
-    count = int(round(end / step))
-    stamps = [round(i * step, 12) for i in range(count + 1)]
-    return [{"t": stamp, "gyro": [float(v) for v in gyro_at(stamp)]} for stamp in stamps]
+def matvec(matrix, vector):
+    return [sum(matrix[row][column] * vector[column] for column in range(3)) for row in range(3)]
 
 
-def zero_frame(end=0.2, step=0.1):
-    return {
-        "run_id": "contract",
-        "initial_quaternion": [1.0, 0.0, 0.0, 0.0],
-        "samples": uniform_samples(end, step, lambda _t: [0.0, 0.0, 0.0]),
-        "static_windows": [[0.0, 0.1], [0.1, 0.2]],
-        "checkpoints": [0.2],
-    }
+def driving_rates(index):
+    return [
+        0.86 * math.sin(0.37 * index + 0.2),
+        0.66 * math.sin(0.53 * index + 1.1),
+        0.74 * math.cos(0.29 * index + 0.7),
+    ]
 
 
-def constant_body_case(q0, rate, motion_start, motion_end, step):
-    end = motion_end + 0.2 + step
+def calibration_rows(matrix, bias, coefficient, temperatures, count, noise=0.0, spikes=None):
+    spikes = spikes or {}
+    rows = []
+    for index in range(count):
+        true_rate = driving_rates(index)
+        temperature = temperatures[index % len(temperatures)]
+        centered = temperature - 25.0
+        raw = matvec(matrix, true_rate)
+        for axis in range(3):
+            raw[axis] += bias[axis] + coefficient[axis] * centered
+            raw[axis] += noise * math.sin((index + 1) * (axis + 2) * 0.43)
+        if index in spikes:
+            raw = [raw[axis] + spikes[index][axis] for axis in range(3)]
+        rows.append({
+            "raw_gyro": raw,
+            "true_rate": true_rate,
+            "temperature_c": temperature,
+        })
+    return rows
 
-    def gyro_at(stamp):
-        if motion_start <= stamp < motion_end:
-            return rate
-        return [0.0, 0.0, 0.0]
 
-    return {
-        "run_id": "body-rate",
+def replay_samples(matrix, bias, coefficient, rate, motion_start, motion_end, temperature, step=0.0005):
+    total = motion_end + 0.2 + step
+
+    def raw_at(stamp):
+        true_rate = rate if motion_start <= stamp < motion_end else [0.0, 0.0, 0.0]
+        raw = matvec(matrix, true_rate)
+        centered = temperature - 25.0
+        return [raw[i] + bias[i] + coefficient[i] * centered for i in range(3)]
+
+    count = int(round(total / step))
+    return [
+        {
+            "t": round(index * step, 12),
+            "raw_gyro": raw_at(round(index * step, 12)),
+            "temperature_c": temperature,
+        }
+        for index in range(count + 1)
+    ]
+
+
+def make_payload(matrix, bias, coefficient, temperatures, count, replay_rate,
+                 q0, duration, temperature_replay, noise=0.0, spikes=None):
+    motion_start = 0.2
+    motion_end = motion_start + duration
+    payload = {
+        "run_id": "calibrated-replay",
+        "calibration": {
+            "samples": calibration_rows(
+                matrix, bias, coefficient, temperatures, count, noise=noise, spikes=spikes
+            )
+        },
         "initial_quaternion": q0,
-        "samples": uniform_samples(end, step, gyro_at),
-        "static_windows": [[0.0, 0.1], [motion_end + 0.1, end]],
+        "samples": replay_samples(
+            matrix, bias, coefficient, replay_rate, motion_start, motion_end, temperature_replay
+        ),
         "checkpoints": [motion_end],
     }
+    expected = qnormalize(qmul(q0, qexp([replay_rate[i] * duration for i in range(3)])))
+    return payload, expected, motion_end
 
 
-def coarse_rate_case(rate, motion_start, motion_end, step):
-    end = motion_end + 0.2 + step
+def matrix_case(case_id):
+    if case_id == 1:
+        matrix = [
+            [1.03, 0.02, -0.01],
+            [-0.015, 0.97, 0.025],
+            [0.01, -0.02, 1.05],
+        ]
+        q0 = [0.8191520442889918, 0.0, 0.0, 0.573576436351046]
+        rate = [0.9, 0.4, -0.2]
+        duration = 0.7
+    elif case_id == 2:
+        matrix = [
+            [0.94, -0.03, 0.018],
+            [0.022, 1.06, -0.012],
+            [-0.017, 0.014, 0.96],
+        ]
+        q0 = [0.5, 0.5, 0.5, 0.5]
+        rate = [0.8, -0.5, 1.2]
+        duration = 0.65
+    else:
+        matrix = [
+            [1.08, 0.012, 0.025],
+            [-0.021, 0.93, 0.019],
+            [0.016, -0.024, 1.04],
+        ]
+        q0 = [0.9238795325112867, 0.3826834323650898, 0.0, 0.0]
+        rate = [0.3, 0.9, -0.4]
+        duration = 0.8
+    bias = [0.012, -0.008, 0.006]
+    payload, expected, stamp = make_payload(
+        matrix, bias, [0.0, 0.0, 0.0], [25.0], 90, rate, q0, duration, 25.0, noise=0.00002
+    )
+    return payload, matrix, expected, stamp
 
-    def gyro_at(stamp):
-        if motion_start <= stamp < motion_end:
-            return rate
-        return [0.0, 0.0, 0.0]
 
-    return {
-        "run_id": "coarse",
-        "initial_quaternion": [1.0, 0.0, 0.0, 0.0],
-        "samples": uniform_samples(end, step, gyro_at),
-        "static_windows": [[0.0, 0.1], [motion_end + 0.1, end]],
-        "checkpoints": [motion_end],
+def temperature_case():
+    matrix = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+    bias = [0.010, -0.006, 0.004]
+    coefficient = [0.0016, -0.0021, 0.0012]
+    temperatures = [15.0 + 0.5 * index for index in range(41)]
+    payload, expected, stamp = make_payload(
+        matrix, bias, coefficient, temperatures, 100, [0.55, -0.35, 0.45],
+        [0.7071067811865476, 0.0, 0.7071067811865475, 0.0], 0.8, 31.0, noise=0.00002
+    )
+    return payload, bias, coefficient, expected, stamp
+
+
+def outlier_case():
+    matrix = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+    bias = [0.009, -0.007, 0.005]
+    spikes = {
+        11: [1.3, -0.8, 0.7],
+        29: [-0.9, 1.4, -1.1],
+        47: [1.1, 0.9, -0.8],
+        66: [-1.2, -0.7, 1.3],
     }
-
-
-def drifting_bias_case():
-    step = 0.001
-    end = 3.0
-    first = [0.010, -0.004, 0.007]
-    last = [0.016, -0.001, 0.010]
-    window_first = [0.1, 0.4]
-    window_last = [2.6, 2.9]
-    motion_start = 0.6
-    motion_end = 2.5
-
-    def bias_at(stamp):
-        if stamp < window_first[0]:
-            return [0.0, 0.0, 0.0]
-        if stamp <= window_first[1]:
-            return list(first)
-        if stamp >= window_last[0]:
-            return list(last)
-        ratio = (stamp - window_first[1]) / (window_last[0] - window_first[1])
-        return [first[i] + ratio * (last[i] - first[i]) for i in range(3)]
-
-    def gyro_at(stamp):
-        bias = bias_at(stamp)
-        body_z = 0.45 if motion_start <= stamp < motion_end else 0.0
-        return [bias[0], bias[1], bias[2] + body_z]
-
-    return {
-        "run_id": "bias-drift",
-        "initial_quaternion": [1.0, 0.0, 0.0, 0.0],
-        "samples": uniform_samples(end, step, gyro_at),
-        "static_windows": [window_first, window_last],
-        "checkpoints": [motion_end],
-    }, first, last
-
-
-def expected_drift_attitude(payload):
-    samples = payload["samples"]
-    first = payload["static_windows"][0]
-    last = payload["static_windows"][-1]
-    start_mean = [sum(row["gyro"][i] for row in samples if first[0] <= row["t"] <= first[1]) /
-                  len([row for row in samples if first[0] <= row["t"] <= first[1]]) for i in range(3)]
-    last_rows = [row for row in samples if last[0] <= row["t"] <= last[1]]
-    end_mean = [sum(row["gyro"][i] for row in last_rows) / len(last_rows) for i in range(3)]
-
-    def bias_at(stamp):
-        if stamp < first[0]:
-            return [0.0, 0.0, 0.0]
-        if stamp <= first[1]:
-            return start_mean
-        if stamp >= last[0]:
-            return end_mean
-        ratio = (stamp - first[1]) / (last[0] - first[1])
-        return [start_mean[i] + ratio * (end_mean[i] - start_mean[i]) for i in range(3)]
-
-    q = [1.0, 0.0, 0.0, 0.0]
-    for index in range(len(samples) - 1):
-        current = samples[index]
-        following = samples[index + 1]
-        dt = following["t"] - current["t"]
-        bias = bias_at(current["t"])
-        omega = [current["gyro"][i] - bias[i] for i in range(3)]
-        q = qnormalize(qmul(q, qexp([omega[0] * dt, omega[1] * dt, omega[2] * dt])))
-        if following["t"] == 2.5:
-            break
-    return q
+    payload, expected, stamp = make_payload(
+        matrix, bias, [0.0, 0.0, 0.0], [25.0], 80, [0.62, 0.38, -0.44],
+        [0.9659258262890683, 0.25881904510252074, 0.0, 0.0], 0.75, 25.0,
+        noise=0.00002, spikes=spikes
+    )
+    return payload, bias, sorted(spikes), expected, stamp
 
 
 # ---------- gate: entry contract ----------
 
 def test_prints_contract_fields():
-    """「程序向标准输出写一个 JSON 对象，字段为 `run_id`、`bias_start`、`bias_end` 和 `attitudes`，不要输出其它文字」"""
-    got = run_case(zero_frame())
-    assert set(got) == {"run_id", "bias_start", "bias_end", "attitudes"}
-    assert got["run_id"] == "contract"
-    assert len(got["attitudes"]) == 1
+    """「程序向标准输出写一个 JSON 对象，字段为 `run_id`、`calibration` 和 `attitudes`，不要输出其它文字」"""
+    payload, _matrix, _expected, _stamp = matrix_case(1)
+    got = run_case(payload)
+    assert set(got) == {"run_id", "calibration", "attitudes"}
+    assert set(got["calibration"]) == {
+        "matrix", "bias_at_25c", "bias_temp_coefficient", "rejected_calibration_indices"
+    }
 
 
 def test_wrong_argument_count_exits_2():
@@ -232,89 +250,70 @@ def test_wrong_argument_count_exits_2():
     assert proc.stdout.strip() == ""
 
 
-# ---------- difficulty_1: body-frame composition ----------
+# ---------- difficulty_1: full cross-axis calibration matrix ----------
 
-def test_attitude_uses_body_rotation_after_initial_heading():
+def test_matrix_recovers_cross_axis_gain():
+    """「`matrix` 把真实机体系角速度映射为陀螺原始读数」"""
+    payload, want, _expected, _stamp = matrix_case(1)
+    got = run_case(payload)["calibration"]["matrix"]
+    assert max(abs(got[row][column] - want[row][column]) for row in range(3) for column in range(3)) < 5.0e-5
+
+
+def test_matrix_inverse_drives_attitude():
     """「姿态表示从机体系到世界系的旋转」"""
-    q0 = [0.8191520442889918, 0.0, 0.0, 0.573576436351046]
-    rate = [0.9, 0.4, -0.2]
-    duration = 0.7
-    payload = constant_body_case(q0, rate, 0.2, 0.9, 0.0005)
-    got = checkpoint_q(run_case(payload), 0.9)
-    want = qnormalize(qmul(q0, qexp([rate[i] * duration for i in range(3)])))
-    assert rotation_error(got, want) < ROTATION_TOL, rotation_error(got, want)
+    payload, _matrix, expected, stamp = matrix_case(2)
+    got = checkpoint_q(run_case(payload), stamp)
+    assert rotation_error(got, expected) < 2.0e-4, rotation_error(got, expected)
 
 
-def test_cross_axis_body_rate_preserves_rotation_order():
-    """「分量在机体系下给出」"""
-    q0 = [0.5, 0.5, 0.5, 0.5]
-    rate = [0.8, -0.5, 1.2]
-    duration = 0.65
-    payload = constant_body_case(q0, rate, 0.2, 0.85, 0.0005)
-    got = checkpoint_q(run_case(payload), 0.85)
-    want = qnormalize(qmul(q0, qexp([rate[i] * duration for i in range(3)])))
-    assert rotation_error(got, want) < ROTATION_TOL, rotation_error(got, want)
-
-
-def test_rotated_initial_frame_keeps_body_axis_motion():
+def test_matrix_handles_rotated_initial_frame():
     """「每个采样值保持到下一个采样时刻」"""
-    q0 = [0.9238795325112867, 0.3826834323650898, 0.0, 0.0]
-    rate = [0.3, 0.9, -0.4]
-    duration = 0.8
-    payload = constant_body_case(q0, rate, 0.2, 1.0, 0.0005)
-    got = checkpoint_q(run_case(payload), 1.0)
-    want = qnormalize(qmul(q0, qexp([rate[i] * duration for i in range(3)])))
-    assert rotation_error(got, want) < ROTATION_TOL, rotation_error(got, want)
+    payload, _matrix, expected, stamp = matrix_case(3)
+    got = checkpoint_q(run_case(payload), stamp)
+    assert rotation_error(got, expected) < 2.0e-4, rotation_error(got, expected)
 
 
-# ---------- difficulty_2: time-varying gyro bias ----------
+# ---------- difficulty_2: temperature-dependent bias ----------
 
-def test_start_bias_uses_first_stationary_window():
-    """「`bias_start` 取首段静止数据的均值」"""
-    payload, first, _last = drifting_bias_case()
-    got = run_case(payload)["bias_start"]
-    assert max(abs(got[i] - first[i]) for i in range(3)) < 1e-12
-
-
-def test_end_bias_uses_last_stationary_window():
-    """「`bias_end` 取末段静止数据的均值」"""
-    payload, _first, last = drifting_bias_case()
-    got = run_case(payload)["bias_end"]
-    assert max(abs(got[i] - last[i]) for i in range(3)) < 1e-12
+def test_bias_at_reference_temperature():
+    """「`bias_at_25c` 是 25°C 的零偏」"""
+    payload, bias, _coefficient, _expected, _stamp = temperature_case()
+    got = run_case(payload)["calibration"]["bias_at_25c"]
+    assert max(abs(got[i] - bias[i]) for i in range(3)) < 5.0e-5
 
 
-def test_attitude_removes_linearly_drifting_bias():
-    """「在首段结束到末段开始之间线性变化」"""
-    payload, _first, _last = drifting_bias_case()
-    got = checkpoint_q(run_case(payload), 2.5)
-    want = expected_drift_attitude(payload)
-    assert rotation_error(got, want) < 2.0e-5, rotation_error(got, want)
+def test_temperature_coefficient_is_recovered():
+    """「`bias_temp_coefficient` 是零偏随摄氏温度的变化率」"""
+    payload, _bias, coefficient, _expected, _stamp = temperature_case()
+    got = run_case(payload)["calibration"]["bias_temp_coefficient"]
+    assert max(abs(got[i] - coefficient[i]) for i in range(3)) < 2.0e-5
 
 
-# ---------- difficulty_3: finite rotation propagation ----------
-
-def test_exact_rotation_across_one_coarse_interval():
-    """「每个采样值保持到下一个采样时刻」"""
-    rate = [0.0, 0.0, 9.0]
-    payload = coarse_rate_case(rate, 0.2, 1.2, 0.2)
-    got = checkpoint_q(run_case(payload), 1.2)
-    want = qexp([rate[i] * 1.0 for i in range(3)])
-    assert rotation_error(got, want) < 2.0e-4, rotation_error(got, want)
+def test_temperature_correction_drives_attitude():
+    """「回放样本带有各自的温度读数」"""
+    payload, _bias, _coefficient, expected, stamp = temperature_case()
+    got = checkpoint_q(run_case(payload), stamp)
+    assert rotation_error(got, expected) < 2.0e-4, rotation_error(got, expected)
 
 
-def test_fast_moderate_rate_rotation_uses_exact_step():
-    """「最后一个采样点不参与积分」"""
-    rate = [0.0, 7.4, 0.0]
-    payload = coarse_rate_case(rate, 0.3, 1.2, 0.15)
-    got = checkpoint_q(run_case(payload), 1.2)
-    want = qexp([rate[i] * 0.9 for i in range(3)])
-    assert rotation_error(got, want) < 2.0e-4, rotation_error(got, want)
+# ---------- difficulty_3: outlier rejection ----------
+
+def test_rejected_indices_are_exact():
+    """「`rejected_calibration_indices` 按 0 开始的原始顺序列出异常标定样本」"""
+    payload, _bias, rejected, _expected, _stamp = outlier_case()
+    got = run_case(payload)["calibration"]["rejected_calibration_indices"]
+    assert got == rejected
 
 
-def test_full_turn_high_rate_keeps_attitude():
-    """「采样间隔较大的高速试验偏差最明显」"""
-    rate = [0.0, 0.0, 2.0 * math.pi]
-    payload = coarse_rate_case(rate, 0.2, 1.2, 0.1)
-    got = checkpoint_q(run_case(payload), 1.2)
-    want = qexp([rate[i] * 1.0 for i in range(3)])
-    assert rotation_error(got, want) < 2.0e-4, rotation_error(got, want)
+def test_outlier_rejection_recovers_bias():
+    """「校准样本可能出现孤立尖峰」"""
+    payload, bias, _rejected, _expected, _stamp = outlier_case()
+    got = run_case(payload)["calibration"]["bias_at_25c"]
+    assert max(abs(got[i] - bias[i]) for i in range(3)) < 6.0e-5
+
+
+def test_outlier_rejection_drives_attitude():
+    """「拟合校准模型时不计入异常标定样本」"""
+    payload, _bias, _rejected, expected, stamp = outlier_case()
+    got = checkpoint_q(run_case(payload), stamp)
+    assert rotation_error(got, expected) < 2.0e-4, rotation_error(got, expected)

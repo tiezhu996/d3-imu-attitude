@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the reference implementation and optionally restore one or more seeded errors.
+# Install the reference implementation and optionally restore one or more seeded estimation modes.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -12,41 +12,16 @@ from pathlib import Path
 
 REVERT = {
     "difficulty_1": (
-        "q = quat_normalize(quat_mul(q, step))",
-        "q = quat_normalize(quat_mul(step, q))",
+        '    matrix_mode = "fitted"',
+        '    matrix_mode = "identity"',
     ),
     "difficulty_2": (
-        """    first_window = windows[0]
-    last_window = windows[-1]
-    bias_start = window_mean(samples, first_window)
-    bias_end = window_mean(samples, last_window)
-    drift_start = float(first_window[1])
-    drift_end = float(last_window[0])
-
-    calibration_start = float(first_window[0])
-
-    def bias_at(stamp):
-        stamp = float(stamp)
-        if stamp < calibration_start:
-            return [0.0, 0.0, 0.0]
-        return interpolate_bias(
-            bias_start, bias_end, drift_start, drift_end, stamp
-        )""",
-        """    constant = [float(value) for value in samples[0]["gyro"]]
-    bias_start = constant
-    bias_end = constant
-
-    def bias_at(_stamp):
-        return constant""",
+        '    temperature_mode = "fit"',
+        '    temperature_mode = "mean"',
     ),
     "difficulty_3": (
-        "        step = quat_exp([omega[0] * dt, omega[1] * dt, omega[2] * dt])",
-        """        step = [
-            1.0,
-            0.5 * omega[0] * dt,
-            0.5 * omega[1] * dt,
-            0.5 * omega[2] * dt,
-        ]""",
+        '    outlier_mode = "detect"',
+        '    outlier_mode = "none"',
     ),
 }
 skip = [item for item in os.environ.get("SKIP", "").split(",") if item]

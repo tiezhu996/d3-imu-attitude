@@ -3,8 +3,8 @@ artifacts = []
 
 [task]
 name = "local/d3-imu-attitude"
-description = "根据三轴陀螺采样复算短时惯性姿态，并处理静止标定零偏与粗采样高速转动"
-keywords = ["physics simulation", "quaternion", "imu", "gyroscope", "attitude"]
+description = "从转台标定数据恢复三轴陀螺增益、零偏和温漂，并用原始采样复算短时姿态"
+keywords = ["physics simulation", "quaternion", "imu", "gyroscope", "calibration"]
 [[task.authors]]
 name = "pi"
 
@@ -13,7 +13,7 @@ author_name = "pi"
 author_email = "unknown"
 difficulty = "hard"
 category = "physics-simulation"
-tags = ["physics simulation", "quaternion", "imu"]
+tags = ["physics simulation", "imu", "calibration"]
 # 审核器按字符串解析（"4h"、"90m"）；裸数字会被当成小时。_min 版本给平台表格用。
 expert_time_estimate = "4h"
 expert_time_estimate_min = 240
