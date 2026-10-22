@@ -105,11 +105,21 @@ def driving_rates(index):
     ]
 
 
-def calibration_rows(matrix, bias, coefficient, temperatures, count, noise=0.0, spikes=None):
+def conditioned_rates(index):
+    theta = 0.31 * index + 0.4
+    epsilon = 1.0e-5
+    return [
+        0.9 * math.sin(theta),
+        0.9 * math.sin(theta + epsilon),
+        0.9 * math.cos(theta + 2.0 * epsilon) + epsilon * math.sin(7.0 * theta),
+    ]
+
+
+def calibration_rows(matrix, bias, coefficient, temperatures, count, noise=0.0, spikes=None, rate_mode="normal"):
     spikes = spikes or {}
     rows = []
     for index in range(count):
-        true_rate = driving_rates(index)
+        true_rate = conditioned_rates(index) if rate_mode == "conditioned" else driving_rates(index)
         temperature = temperatures[index % len(temperatures)]
         centered = temperature - 25.0
         raw = matvec(matrix, true_rate)
@@ -147,14 +157,15 @@ def replay_samples(matrix, bias, coefficient, rate, motion_start, motion_end, te
 
 
 def make_payload(matrix, bias, coefficient, temperatures, count, replay_rate,
-                 q0, duration, temperature_replay, noise=0.0, spikes=None):
+                 q0, duration, temperature_replay, noise=0.0, spikes=None, rate_mode="normal"):
     motion_start = 0.2
     motion_end = motion_start + duration
     payload = {
         "run_id": "calibrated-replay",
         "calibration": {
             "samples": calibration_rows(
-                matrix, bias, coefficient, temperatures, count, noise=noise, spikes=spikes
+                matrix, bias, coefficient, temperatures, count, noise=noise, spikes=spikes,
+                rate_mode=rate_mode
             )
         },
         "initial_quaternion": q0,
@@ -197,7 +208,8 @@ def matrix_case(case_id):
         duration = 0.8
     bias = [0.012, -0.008, 0.006]
     payload, expected, stamp = make_payload(
-        matrix, bias, [0.0, 0.0, 0.0], [25.0], 90, rate, q0, duration, 25.0, noise=0.00002
+        matrix, bias, [0.0, 0.0, 0.0], [25.0], 90, rate, q0, duration, 25.0,
+        noise=0.0, rate_mode="conditioned" if case_id == 2 else "normal"
     )
     return payload, matrix, expected, stamp
 

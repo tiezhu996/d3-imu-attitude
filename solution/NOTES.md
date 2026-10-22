@@ -25,8 +25,8 @@
 ## 核心公式与独立复算
 
 - 解析推导：`research/derivations.md` 第 1–3 节。
-- 独立数值复核：`research/verify_calibration.py`，另有 `research/verify_attitude.py` 验证四元数传播。
-- 独立 OLS 输出：`rejected=[11, 29, 47, 66]`，矩阵误差 `2.603e-06`，零偏误差 `6.449e-07`，温漂误差 `8.352e-08`。
+- 独立数值复核：`research/verify_calibration.py`，另有 `research/verify_attitude.py` 验证四元数传播。高相关激励用 Householder QR 拟合。
+- 独立 OLS/QR 输出：`rejected=[11, 29, 47, 66]`，矩阵误差 `2.603e-06`，零偏误差 `6.449e-07`，温漂误差 `8.352e-08`，条件化 QR 误差 `1.158e-07`。
 - 测试容差：矩阵 `5e-5`，零偏 `5e-5 rad/s`，温漂 `2e-5 rad/s/K`，姿态 `2e-4 rad`。
 
 ## 容差依据

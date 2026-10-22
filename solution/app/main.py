@@ -72,38 +72,37 @@ def invert_matrix(matrix):
     ]
 
 
-def solve_linear(matrix, target):
-    size = len(target)
-    work = [list(matrix[row]) + [float(target[row])] for row in range(size)]
-    for _ in range(size):
-        diagonal = max(range(_ , size), key=lambda row: abs(work[row][_]))
-        work[_], work[diagonal] = work[diagonal], work[_]
-        pivot = work[_][_]
-        if abs(pivot) < 1.0e-14:
-            raise ValueError("singular normal equations")
-        for column in range(_, size + 1):
-            work[_][column] /= pivot
-        for row in range(size):
-            if row == _:
-                continue
-            factor = work[row][_]
-            for column in range(_, size + 1):
-                work[row][column] -= factor * work[_][column]
-    return [work[row][size] for row in range(size)]
-
-
 def least_squares(features, target):
-    size = len(features[0])
-    normal = [[0.0] * size for _ in range(size)]
-    rhs = [0.0] * size
-    for row, value in zip(features, target):
-        for left in range(size):
-            rhs[left] += row[left] * value
-            for right in range(size):
-                normal[left][right] += row[left] * row[right]
-    for index in range(size):
-        normal[index][index] += RIDGE
-    return solve_linear(normal, rhs)
+    rows = len(features)
+    columns = len(features[0])
+    work = [
+        [float(features[row][column]) for column in range(columns)] + [float(target[row])]
+        for row in range(rows)
+    ]
+    for active in range(columns):
+        tail = [work[row][active] for row in range(active, rows)]
+        norm = math.sqrt(sum(value * value for value in tail))
+        if norm < RIDGE:
+            raise ValueError("rank deficient design")
+        alpha = -norm if tail[0] >= 0.0 else norm
+        vector = tail[:]
+        vector[0] -= alpha
+        vector_norm = math.sqrt(sum(value * value for value in vector))
+        if vector_norm < RIDGE:
+            continue
+        vector = [value / vector_norm for value in vector]
+        for column in range(active, columns + 1):
+            dot = sum(vector[index] * work[active + index][column] for index in range(rows - active))
+            for index in range(rows - active):
+                work[active + index][column] -= 2.0 * vector[index] * dot
+    result = [0.0] * columns
+    for row in range(columns - 1, -1, -1):
+        pivot = work[row][row]
+        if abs(pivot) < RIDGE:
+            raise ValueError("rank deficient triangular system")
+        rhs = work[row][columns] - sum(work[row][column] * result[column] for column in range(row + 1, columns))
+        result[row] = rhs / pivot
+    return result
 
 
 def fit_matrix_bias(rows):
@@ -189,7 +188,8 @@ def estimate_calibration(rows):
     coefficient = [0.0, 0.0, 0.0]
     for _ in range(6):
         clean = [row for position, row in enumerate(rows) if position not in rejected]
-        if matrix_mode == "fitted" and temperature_mode == "fit":
+        temperature_span = max(row["temperature_c"] for row in clean) - min(row["temperature_c"] for row in clean)
+        if matrix_mode == "fitted" and temperature_mode == "fit" and temperature_span >= 1.0e-9:
             matrix, bias, coefficient = fit_joint(clean)
         elif matrix_mode == "fitted":
             matrix, _matrix_bias = fit_matrix_bias(clean)
@@ -210,7 +210,8 @@ def estimate_calibration(rows):
             break
         rejected = new_rejected
     clean = [row for position, row in enumerate(rows) if position not in rejected]
-    if matrix_mode == "fitted" and temperature_mode == "fit":
+    temperature_span = max(row["temperature_c"] for row in clean) - min(row["temperature_c"] for row in clean)
+    if matrix_mode == "fitted" and temperature_mode == "fit" and temperature_span >= 1.0e-9:
         matrix, bias, coefficient = fit_joint(clean)
     elif matrix_mode == "fitted":
         matrix, _matrix_bias = fit_matrix_bias(clean)
