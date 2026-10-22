@@ -88,7 +88,7 @@ def least_squares(features, target):
         norm = math.sqrt(sum(value * value for value in tail))
         if norm < RIDGE:
             raise ValueError("rank deficient design")
-        alpha = -norm if tail[0] >= 0.0 else norm
+        alpha = -norm if not tail[0] < 0.0 else norm
         vector = tail[:]
         vector[0] -= alpha
         vector_norm = math.sqrt(sum(value * value for value in vector))
@@ -193,7 +193,7 @@ def estimate_calibration(rows, nominal_matrix):
     for _ in range(6):
         clean = [row for position, row in enumerate(rows) if position not in rejected]
         temperature_span = max(row["temperature_c"] for row in clean) - min(row["temperature_c"] for row in clean)
-        if matrix_mode == "fitted" and temperature_mode == "fit" and temperature_span >= 1.0e-9:
+        if matrix_mode == "fitted" and temperature_mode == "fit" and not temperature_span < 1.0e-9:
             matrix, bias, coefficient = fit_joint(clean)
         elif matrix_mode == "fitted":
             matrix, _matrix_bias = fit_matrix_bias(clean)
@@ -215,7 +215,7 @@ def estimate_calibration(rows, nominal_matrix):
         rejected = new_rejected
     clean = [row for position, row in enumerate(rows) if position not in rejected]
     temperature_span = max(row["temperature_c"] for row in clean) - min(row["temperature_c"] for row in clean)
-    if matrix_mode == "fitted" and temperature_mode == "fit" and temperature_span >= 1.0e-9:
+    if matrix_mode == "fitted" and temperature_mode == "fit" and not temperature_span < 1.0e-9:
         matrix, bias, coefficient = fit_joint(clean)
     elif matrix_mode == "fitted":
         matrix, _matrix_bias = fit_matrix_bias(clean)
@@ -255,7 +255,7 @@ def run(data):
         current = samples[index]
         following = samples[index + 1]
         dt = float(following["t"]) - float(current["t"])
-        if dt <= 0.0:
+        if not dt > 0.0:
             raise ValueError("sample times must increase")
         rate = corrected_rate(
             current["raw_gyro"],
