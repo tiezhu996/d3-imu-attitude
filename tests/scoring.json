@@ -6,15 +6,15 @@
   ],
   "tests": {
     "test_outputs.py::test_matrix_recovers_cross_axis_gain": {
-      "weight": 0.1,
+      "weight": 0.08,
       "rationale": "难点1：从标定数据恢复完整 3×3 增益矩阵，核心标定量，难点合计0.40"
     },
     "test_outputs.py::test_matrix_inverse_drives_attitude": {
-      "weight": 0.1,
+      "weight": 0.08,
       "rationale": "难点1：矩阵求逆后用于多轴回放"
     },
     "test_outputs.py::test_matrix_handles_rotated_initial_frame": {
-      "weight": 0.1,
+      "weight": 0.08,
       "rationale": "难点1：非单位初始姿态下确认增益修正方向"
     },
     "test_outputs.py::test_bias_at_reference_temperature": {
@@ -42,8 +42,12 @@
       "rationale": "难点3：异常样本不得污染最终姿态"
     },
     "test_outputs.py::test_small_signal_matrix_keeps_scale": {
-      "weight": 0.1,
+      "weight": 0.08,
       "rationale": "难点1：小信号增益矩阵的行列式很小但条件数正常，不能按绝对阈值误判奇异"
+    },
+    "test_outputs.py::test_nearly_singular_matrix_remains_invertible": {
+      "weight": 0.08,
+      "rationale": "难点1：行列式很小但非零的标定矩阵仍需高精度可逆处理"
     }
   }
 }

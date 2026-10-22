@@ -206,7 +206,7 @@ def matrix_case(case_id):
         q0 = [0.9238795325112867, 0.3826834323650898, 0.0, 0.0]
         rate = [0.3, 0.9, -0.4]
         duration = 0.8
-    else:
+    elif case_id == 4:
         scale = 8.0e-6
         matrix = [
             [1.04 * scale, 0.018 * scale, -0.012 * scale],
@@ -216,9 +216,24 @@ def matrix_case(case_id):
         q0 = [0.9238795325112867, 0.0, 0.3826834323650898, 0.0]
         rate = [0.5, -0.3, 0.7]
         duration = 0.7
+    else:
+        theta = 0.6
+        cosine, sine = math.cos(theta), math.sin(theta)
+        rotation = [[cosine, -sine, 0.0], [sine, cosine, 0.0], [0.0, 0.0, 1.0]]
+        inverse_rotation = [[cosine, sine, 0.0], [-sine, cosine, 0.0], [0.0, 0.0, 1.0]]
+        singular = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0e-15]]
+        matrix = [
+            [sum(rotation[i][k] * singular[k][l] * inverse_rotation[l][j] for k in range(3) for l in range(3)) for j in range(3)]
+            for i in range(3)
+        ]
+        q0 = [0.9238795325112867, 0.3826834323650898, 0.0, 0.0]
+        rate = [0.5, -0.3, 0.7]
+        duration = 0.7
     bias = [0.012, -0.008, 0.006]
     if case_id == 4:
         bias = [5.0e-7, -3.0e-7, 4.0e-7]
+    if case_id == 5:
+        bias = [0.0, 0.0, 0.0]
     payload, expected, stamp = make_payload(
         matrix, bias, [0.0, 0.0, 0.0], [25.0], 90, rate, q0, duration, 25.0,
         noise=0.0, rate_mode="conditioned" if case_id == 2 else "normal"
@@ -305,6 +320,13 @@ def test_small_signal_matrix_keeps_scale():
     scale = max(abs(value) for row in want for value in row)
     assert max(abs(got[row][column] - want[row][column]) for row in range(3) for column in range(3)) < 5.0e-5 * scale
     assert rotation_error(checkpoint_q(result, stamp), expected) < 2.0e-4
+
+
+def test_nearly_singular_matrix_remains_invertible():
+    """「标定矩阵可能接近奇异，但行列式不为零时仍应按可逆处理」"""
+    payload, _matrix, expected, stamp = matrix_case(5)
+    got = checkpoint_q(run_case(payload), stamp)
+    assert rotation_error(got, expected) < 2.0e-4, rotation_error(got, expected)
 
 
 # ---------- difficulty_2: temperature-dependent bias ----------

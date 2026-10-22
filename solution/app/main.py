@@ -4,6 +4,7 @@
 import json
 import math
 import sys
+from decimal import Decimal, localcontext
 
 OUTLIER_THRESHOLD = 0.15
 RIDGE = 1.0e-12
@@ -59,18 +60,20 @@ def identity_matrix():
 
 
 def invert_matrix(matrix):
-    a, b, c = matrix[0]
-    d, e, f = matrix[1]
-    g, h, i = matrix[2]
-    determinant = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
-    scale = max(abs(value) for row in matrix for value in row)
-    if abs(determinant) < 1.0e-12 * scale * scale * scale:
-        raise ValueError("singular calibration matrix")
-    return [
-        [(e * i - f * h) / determinant, (c * h - b * i) / determinant, (b * f - c * e) / determinant],
-        [(f * g - d * i) / determinant, (a * i - c * g) / determinant, (c * d - a * f) / determinant],
-        [(d * h - e * g) / determinant, (b * g - a * h) / determinant, (a * e - b * d) / determinant],
-    ]
+    with localcontext() as context:
+        context.prec = 60
+        a, b, c = [Decimal(str(value)) for value in matrix[0]]
+        d, e, f = [Decimal(str(value)) for value in matrix[1]]
+        g, h, i = [Decimal(str(value)) for value in matrix[2]]
+        determinant = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
+        if determinant == 0:
+            raise ValueError("singular calibration matrix")
+        inverse = [
+            [(e * i - f * h) / determinant, (c * h - b * i) / determinant, (b * f - c * e) / determinant],
+            [(f * g - d * i) / determinant, (a * i - c * g) / determinant, (c * d - a * f) / determinant],
+            [(d * h - e * g) / determinant, (b * g - a * h) / determinant, (a * e - b * d) / determinant],
+        ]
+        return [[float(value) for value in row] for row in inverse]
 
 
 def least_squares(features, target):
